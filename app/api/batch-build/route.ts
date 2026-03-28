@@ -19,7 +19,7 @@ import {
 } from "stellar-sdk";
 import { validatePaymentInstructions, getRecommendedFee } from "@/lib/stellar";
 import { createBatches, parseAsset } from "@/lib/stellar/batcher";
-import { validatePaymentInstruction } from "@/lib/stellar/validator";
+import { validatePaymentInstruction, buildBalancesMap, validateBalances } from "@/lib/stellar/validator";
 import type { PaymentInstruction } from "@/lib/stellar/types";
 
 interface RequestBody {
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
         const server = new Horizon.Server(serverUrl);
 
         const sourceAccount = await server.loadAccount(publicKey);
-        const batches = await createBatches(payments, MAX_OPS, { network, server });
+        const batches = createBatches(payments, MAX_OPS, { network });
         const networkPassphrase =
             network === "testnet" ? Networks.TESTNET : Networks.PUBLIC;
 

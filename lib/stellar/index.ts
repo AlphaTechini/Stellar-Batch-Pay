@@ -6,5 +6,4 @@
 export { parseInput, parseJSON, parseCSV, parseFileStream, analyzeParsedPayments, parsePaymentFile } from './parser';
 export { createBatches, parseAsset, getBatchSummary } from './batcher';
 export { validatePaymentInstruction, validateBatchConfig, validatePaymentInstructions } from './validator';
-export { fetchFeeStats, getRecommendedFee, getFeeForOperations, clearFeeCache } from './fee-service';
-export type { PaymentInstruction, Asset, StellarTransaction, PaymentResult, BatchResult, BatchConfig, PaymentValidationRow, ParsedPaymentFile, FeeStats, FeeOptions } from './types';
+export type { PaymentInstruction, Asset, StellarTransaction, PaymentResult, BatchResult, BatchConfig, PaymentValidationRow, ParsedPaymentFile } from './types';

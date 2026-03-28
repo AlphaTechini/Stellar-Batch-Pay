@@ -17,7 +17,6 @@ import {
 import { PaymentInstruction, BatchResult, PaymentResult, BatchConfig } from './types';
 import { createBatches, parseAsset } from './batcher';
 import { validatePaymentInstruction, validateBatchConfig } from './validator';
-import { getRecommendedFee } from './fee-service';
 
 export class StellarService {
   private keypair: Keypair;
@@ -51,11 +50,8 @@ export class StellarService {
     const startTime = new Date();
 
     try {
-      // Get source account
+      // Get source account and validate balances
       const sourceAccount = await this.server.loadAccount(this.keypair.publicKey());
-
-      // Fetch dynamic fee from Horizon
-      const dynamicFee = await getRecommendedFee(this.server);
 
       // Batch payments
       const batches = await createBatches(
