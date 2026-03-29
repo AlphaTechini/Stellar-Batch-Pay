@@ -171,6 +171,16 @@ impl BatchVestingContract {
             soroban_sdk::panic_with_error!(&env, VestingError::InvalidUnlockTime);
         }
 
+        for i in 0..recipients.len() {
+            let current = recipients.get(i).unwrap();
+            for j in (i + 1)..recipients.len() {
+                let other = recipients.get(j).unwrap();
+                if current == other {
+                    panic!("Duplicate recipients not allowed");
+                }
+            }
+        }
+
         let mut total_amount: i128 = 0;
 
         for i in 0..recipients.len() {
@@ -194,11 +204,7 @@ impl BatchVestingContract {
             );
 
             env.events().publish(
-                (
-                    Symbol::new(&env, "VestingDeposited"),
-                    sender.clone(),
-                    recipient.clone(),
-                ),
+                (Symbol::new(&env, "VestingDeposited"), sender.clone(), recipient),
                 (amount, unlock_time),
             );
         }
@@ -222,6 +228,22 @@ impl BatchVestingContract {
         let stored_admin = Self::get_admin(&env).expect("Admin must be set to toggle pause");
         if admin != stored_admin {
             soroban_sdk::panic_with_error!(&env, VestingError::NotAdmin);
+    /// Propose a new admin. Only the current admin can nominate a successor.
+    pub fn propose_admin(env: Env, admin: Address, new_admin: Address) {
+        Self::require_current_admin(&env, &admin);
+        Self::set_pending_admin_internal(&env, &new_admin);
+        env.events().publish(
+            (Symbol::new(&env, "AdminTransferProposed"),),
+            (admin, new_admin),
+        );
+    }
+
+    /// Accept a pending admin transfer.
+    pub fn accept_admin(env: Env, new_admin: Address) {
+        new_admin.require_auth();
+        let pending_admin = Self::get_pending_admin(&env).expect("No admin transfer proposed");
+        if new_admin != pending_admin {
+            panic!("Only pending admin can accept transfer");
         }
 
         let previous_admin = Self::get_admin(&env).expect("Admin must be set");
@@ -307,11 +329,7 @@ impl BatchVestingContract {
         token_client.transfer(&env.current_contract_address(), &sender, &revoked_amount);
 
         env.events().publish(
-            (
-                Symbol::new(&env, "VestingRevoked"),
-                recipient.clone(),
-                sender.clone(),
-            ),
+            (Symbol::new(&env, "VestingRevoked"), recipient, sender),
             (revoked_amount, unlock_time),
         );
     }
@@ -368,11 +386,7 @@ impl BatchVestingContract {
             token_client.transfer(&env.current_contract_address(), &sender, &revoked_amount);
 
             env.events().publish(
-                (
-                    Symbol::new(&env, "VestingRevoked"),
-                    recipient.clone(),
-                    sender.clone(),
-                ),
+                (Symbol::new(&env, "VestingRevoked"), recipient, sender),
                 (revoked_amount, unlock_time),
             );
         }
@@ -432,8 +446,8 @@ impl BatchVestingContract {
         );
 
         env.events().publish(
-            (Symbol::new(&env, "VestingClaimed"), recipient.clone()),
-            amount_to_transfer,
+            (Symbol::new(&env, "VestingClaimed"), recipient),
+            (amount_to_transfer,),
         );
     }
 }
