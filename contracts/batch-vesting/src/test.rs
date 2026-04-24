@@ -333,7 +333,8 @@ fn test_deposit_unauthorized() {
     let client = BatchVestingContractClient::new(&env, &contract_id);
 
     let sender = Address::generate(&env);
-    let token = Address::generate(&env);
+    let token_admin = Address::generate(&env); let (token_client, _) = create_token_contract(&env, &token_admin); let token = token_client.address;
+    (TokenAdminClient::new(&env, &token)).mint(&sender, &i128::MAX);
     let recipients = Vec::from_array(&env, [Address::generate(&env)]);
     let amounts = Vec::from_array(&env, [100]);
     let unlock_time = 1000;
@@ -1490,7 +1491,8 @@ fn test_lazy_migration() {
 
     let recipient = Address::generate(&env);
     let sender = Address::generate(&env);
-    let token = Address::generate(&env);
+    let token_admin = Address::generate(&env); let (token_client, _) = create_token_contract(&env, &token_admin); let token = token_client.address;
+    (TokenAdminClient::new(&env, &token)).mint(&sender, &i128::MAX);
 
     // Manually inject older Vec<VestingData> storage using Env's as_contract
     let old_data = Vec::from_array(
@@ -1696,4 +1698,76 @@ fn test_revoke_event_includes_token_address() {
     assert_eq!(payload.0, 100i128, "amount mismatch");
     assert_eq!(payload.1, 1000u64, "unlock_time mismatch");
     assert_eq!(payload.2, token.address, "token address missing from revoke event");
+}
+
+#[test]
+#[should_panic(expected = "HostError: Error(Contract, #13)")]
+fn test_deposit_overflow() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, BatchVestingContract);
+    let client = BatchVestingContractClient::new(&env, &contract_id);
+
+    let sender = Address::generate(&env);
+    let recipient1 = Address::generate(&env);
+    let recipient2 = Address::generate(&env);
+
+    let token_admin = Address::generate(&env); let (token_client, _) = create_token_contract(&env, &token_admin); let token = token_client.address;
+    (TokenAdminClient::new(&env, &token)).mint(&sender, &i128::MAX);
+
+    let recipients = Vec::from_array(&env, [recipient1.clone(), recipient2.clone()]);
+    // amounts that will overflow i128 if added
+    let amounts = Vec::from_array(&env, [i128::MAX, 1]);
+    let unlock_time = 1000;
+
+    env.ledger().with_mut(|li| {
+        li.timestamp = 0;
+    });
+
+    client.deposit(&sender, &token, &recipients, &amounts, &unlock_time);
+}
+
+#[test]
+fn test_get_vestings_pagination_overflow() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, BatchVestingContract);
+    let client = BatchVestingContractClient::new(&env, &contract_id);
+
+    let sender = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let token_admin = Address::generate(&env); let (token_client, _) = create_token_contract(&env, &token_admin); let token = token_client.address;
+    (TokenAdminClient::new(&env, &token)).mint(&sender, &i128::MAX);
+
+    env.ledger().with_mut(|li| {
+        li.timestamp = 0;
+    });
+
+    client.deposit(
+        &sender,
+        &token,
+        &Vec::from_array(&env, [recipient.clone()]),
+        &Vec::from_array(&env, [100]),
+        &1000,
+    );
+
+    // This should not panic and should return 1 vesting
+    let vestings = client.get_vestings(&recipient, &0, &u32::MAX);
+    assert_eq!(vestings.len(), 1);
+}
+
+#[test]
+#[should_panic(expected = "HostError: Error(Contract, #7)")]
+fn test_require_admin_not_set() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, BatchVestingContract);
+    let client = BatchVestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    // toggle_pause requires admin, but none is set
+    client.toggle_pause(&admin, &true);
 }
