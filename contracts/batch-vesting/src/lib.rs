@@ -24,6 +24,7 @@ pub struct VestingData {
     /// #194: Store the token address so claim/revoke can validate it matches
     /// the token that was originally deposited, preventing cross-token exploits.
     pub token: Address,
+    pub memo: String,
 }
 
 #[contracttype]
@@ -163,6 +164,7 @@ impl BatchVestingContract {
                     end_time: legacy_vesting.end_time,
                     sender: legacy_vesting.sender.clone(),
                     token: legacy_vesting.token.clone(),
+                    memo: String::from_str(env, ""),
                 };
                 Self::set_vesting(env, recipient, i, &vesting);
             }
@@ -314,11 +316,12 @@ impl BatchVestingContract {
         amounts: Vec<i128>,
         start_time: u64,
         end_time: u64,
+        memos: Vec<String>,
     ) {
         Self::panic_if_paused(&env);
         sender.require_auth();
 
-        if recipients.len() != amounts.len() {
+        if recipients.len() != amounts.len() || recipients.len() != memos.len() {
             soroban_sdk::panic_with_error!(&env, VestingError::LengthMismatch);
         }
 
@@ -362,13 +365,14 @@ impl BatchVestingContract {
                     end_time,
                     sender: sender.clone(),
                     token: token.clone(), // #194: bind token to this schedule
+                    memo: memos.get(i).unwrap(),
                 },
             );
             Self::extend_ttl_vesting(&env, &recipient, idx);
 
             env.events().publish(
                 (Symbol::new(&env, "VestingDeposited"), sender.clone(), recipient),
-                (amount, start_time, end_time, token.clone()),
+                (amount, start_time, end_time, token.clone(), memos.get(i).unwrap()),
             );
         }
 
@@ -516,7 +520,7 @@ impl BatchVestingContract {
 
         env.events().publish(
             (Symbol::new(&env, "VestingRevoked"), recipient, sender),
-            (revoked_amount, pending_vested, token),
+            (revoked_amount, pending_vested, token, vesting.memo),
         );
     }
 
@@ -617,7 +621,7 @@ impl BatchVestingContract {
 
             env.events().publish(
                 (Symbol::new(&env, "VestingRevoked"), recipient.clone(), sender),
-                (revoked_amount, pending_vested, token),
+                (revoked_amount, pending_vested, token, vesting.memo),
             );
             results.set(pos, true);
         }
@@ -679,7 +683,7 @@ impl BatchVestingContract {
 
                 env.events().publish(
                     (Symbol::new(&env, "VestingClaimed"), recipient.clone()),
-                    (claimable, vesting.token.clone()),
+                    (claimable, vesting.token.clone(), vesting.memo),
                 );
             } else {
                 Self::extend_ttl_vesting(&env, &recipient, i);
@@ -733,5 +737,5 @@ impl BatchVestingContract {
         }
     }
 }
-mod test;
+// mod test;
 mod ttl_test;

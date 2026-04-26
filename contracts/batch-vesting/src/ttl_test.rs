@@ -32,7 +32,8 @@ fn test_ttl_bumping_logic() {
         &Vec::from_array(&env, [recipient.clone()]),
         &Vec::from_array(&env, [1000]),
         &1000,
-        &2000
+        &2000,
+        &Vec::from_array(&env, [soroban_sdk::String::from_str(&env, "Test Memo")]),
     );
 
     // Verify it doesn't crash

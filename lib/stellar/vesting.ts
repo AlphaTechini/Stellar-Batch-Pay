@@ -68,6 +68,7 @@ export async function buildDepositTransaction(
 
   const recipients = payments.map((p) => p.address);
   const amounts = payments.map((p) => p.amount);
+  const memos = payments.map((p) => p.memo || '');
 
   const operation = contract.call(
     'deposit',
@@ -75,7 +76,9 @@ export async function buildDepositTransaction(
     new Address(tokenAddress).toScVal(),        // token: Address
     addressVecToScVal(recipients),              // recipients: Vec<Address>
     amountVecToScVal(amounts),                  // amounts: Vec<i128>
-    nativeToScVal(BigInt(unlockTime), { type: 'u64' }) // unlock_time: u64
+    nativeToScVal(BigInt(unlockTime), { type: 'u64' }), // start_time: u64
+    nativeToScVal(BigInt(unlockTime + 31536000), { type: 'u64' }), // end_time: u64 (default 1 year)
+    xdr.ScVal.scvVec(memos.map(m => nativeToScVal(m, { type: 'string' }))) // memos: Vec<String>
   );
 
   const tx = new TransactionBuilder(account, {
