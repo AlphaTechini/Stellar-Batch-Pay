@@ -86,6 +86,13 @@
                 },
                 {
                   "u64": 2000
+                },
+                {
+                  "vec": [
+                    {
+                      "string": "Test Memo"
+                    }
+                  ]
                 }
               ]
             }
@@ -287,6 +294,14 @@
                       },
                       "val": {
                         "u64": 2000
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "memo"
+                      },
+                      "val": {
+                        "string": "Test Memo"
                       }
                     },
                     {

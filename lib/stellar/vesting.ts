@@ -78,20 +78,17 @@ export async function buildDepositTransaction(
   // #210: Extract tokens from each payment (one per recipient)
   const recipients = payments.map((p) => p.address);
   const amounts = payments.map((p) => p.amount);
-  const tokens = payments.map((p) => assetToTokenAddress(p.asset ?? 'XLM', network));
-
-  // Use current time as start_time; unlockTime is the end_time
-  const startTime = Math.floor(Date.now() / 1000);
-  const endTime = Math.max(unlockTime, startTime);
+  const memos = payments.map((p) => p.memo || '');
 
   const operation = contract.call(
     'deposit',
-    new Address(publicKey).toScVal(),         // sender: Address
-    addressVecToScVal(tokens),                 // tokens: Vec<Address> (#210)
-    addressVecToScVal(recipients),             // recipients: Vec<Address>
-    amountVecToScVal(amounts),                 // amounts: Vec<i128>
-    nativeToScVal(BigInt(startTime), { type: 'u64' }),  // start_time: u64
-    nativeToScVal(BigInt(endTime), { type: 'u64' })     // end_time: u64
+    new Address(publicKey).toScVal(),          // sender: Address
+    new Address(tokenAddress).toScVal(),        // token: Address
+    addressVecToScVal(recipients),              // recipients: Vec<Address>
+    amountVecToScVal(amounts),                  // amounts: Vec<i128>
+    nativeToScVal(BigInt(unlockTime), { type: 'u64' }), // start_time: u64
+    nativeToScVal(BigInt(unlockTime + 31536000), { type: 'u64' }), // end_time: u64 (default 1 year)
+    xdr.ScVal.scvVec(memos.map(m => nativeToScVal(m, { type: 'string' }))) // memos: Vec<String>
   );
 
   const tx = new TransactionBuilder(account, {
