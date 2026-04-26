@@ -209,19 +209,14 @@ impl BatchVestingContract {
             let count = old_vestings.len();
             for i in 0..count {
                 let legacy_vesting = old_vestings.get(i).unwrap();
-                // Ensure batch_id is set, use default if needed
-                let vesting = if legacy_vesting.batch_id == 0 {
-                    // Old data without batch_id; use default (batch_id 0 is reserved)
-                    VestingData {
-                        total_amount: legacy_vesting.total_amount,
-                        released_amount: legacy_vesting.released_amount,
-                        start_time: legacy_vesting.start_time,
-                        end_time: legacy_vesting.end_time,
-                        batch_id: 0,
-                        token: legacy_vesting.token.clone(),
-                    }
-                } else {
-                    legacy_vesting.clone()
+                // Map legacy VestingData to new structure
+                let vesting = VestingData {
+                    total_amount: legacy_vesting.total_amount,
+                    released_amount: legacy_vesting.released_amount,
+                    start_time: legacy_vesting.start_time,
+                    end_time: legacy_vesting.end_time,
+                    sender: legacy_vesting.sender.clone(),
+                    token: legacy_vesting.token.clone(),
                 };
                 Self::set_vesting(env, recipient, i, &vesting);
             }
@@ -336,11 +331,6 @@ impl BatchVestingContract {
     }
 
     fn extend_ttl_paused(env: &Env) {
-        if env.storage().persistent().has(&DataKey::PauseMask) {
-            env.storage()
-                .persistent()
-                .extend_ttl(&DataKey::PauseMask, BUMP_THRESHOLD, BUMP_EXTEND_TO);
-        }
         if env.storage().persistent().has(&DataKey::Paused) {
             env.storage()
                 .persistent()
@@ -348,58 +338,27 @@ impl BatchVestingContract {
         }
     }
 
-    fn get_next_batch_id(env: &Env) -> u32 {
-        let current = env.storage()
-            .persistent()
-            .get::<_, u32>(&DataKey::BatchCounter)
-            .unwrap_or(0u32);
-        current
-    }
-
-    fn increment_batch_id(env: &Env) {
-        let current = Self::get_next_batch_id(env);
-        let next = current
-            .checked_add(1)
-            .unwrap_or_else(|| soroban_sdk::panic_with_error!(env, VestingError::Overflow));
+    fn extend_ttl_instance(env: &Env) {
         env.storage()
-            .persistent()
-            .set(&DataKey::BatchCounter, &next);
-        env.storage().persistent().extend_ttl(
-            &DataKey::BatchCounter,
-            BUMP_THRESHOLD,
-            BUMP_EXTEND_TO,
-        );
-    }
-
-    fn set_batch_info(env: &Env, batch_id: u32, info: &BatchInfo) {
-        env.storage()
-            .persistent()
-            .set(&DataKey::BatchInfo(batch_id), info);
-        env.storage().persistent().extend_ttl(
-            &DataKey::BatchInfo(batch_id),
-            BUMP_THRESHOLD,
-            BUMP_EXTEND_TO,
-        );
-    }
-
-    fn get_batch_info(env: &Env, batch_id: u32) -> BatchInfo {
-        env.storage()
-            .persistent()
-            .get(&DataKey::BatchInfo(batch_id))
-            .unwrap_or_else(|| soroban_sdk::panic_with_error!(env, VestingError::NotFound))
+            .instance()
+            .extend_ttl(BUMP_THRESHOLD, BUMP_EXTEND_TO);
     }
 
     fn extend_ttl_vesting(env: &Env, recipient: &Address, idx: u32) {
-        env.storage().persistent().extend_ttl(
-            &DataKey::VestingEntry(recipient.clone(), idx),
-            BUMP_THRESHOLD,
-            BUMP_EXTEND_TO,
-        );
-        env.storage().persistent().extend_ttl(
-            &DataKey::VestingCount(recipient.clone()),
-            BUMP_THRESHOLD,
-            BUMP_EXTEND_TO,
-        );
+        if env.storage().persistent().has(&DataKey::VestingEntry(recipient.clone(), idx)) {
+            env.storage().persistent().extend_ttl(
+                &DataKey::VestingEntry(recipient.clone(), idx),
+                BUMP_THRESHOLD,
+                BUMP_EXTEND_TO,
+            );
+        }
+        if env.storage().persistent().has(&DataKey::VestingCount(recipient.clone())) {
+            env.storage().persistent().extend_ttl(
+                &DataKey::VestingCount(recipient.clone()),
+                BUMP_THRESHOLD,
+                BUMP_EXTEND_TO,
+            );
+        }
     }
 }
 
@@ -863,5 +822,29 @@ impl BatchVestingContract {
 
         result_vec
     }
+
+    /// Bumps the TTL for the contract instance and administrative keys.
+    /// Can be called by anyone to help maintain the contract's availability.
+    pub fn bump_instance_ttl(env: Env) {
+        Self::extend_ttl_instance(&env);
+        Self::extend_ttl_admin(&env);
+        Self::extend_ttl_paused(&env);
+    }
+
+    /// Bumps the TTL for a specific vesting schedule and the recipient's schedule count.
+    /// Can be called by anyone (e.g., a keeper bot or the recipient).
+    pub fn bump_vesting_ttl(env: Env, recipient: Address, index: u32) {
+        Self::extend_ttl_vesting(&env, &recipient, index);
+    }
+
+    /// Maintenance function to bump everything relevant to a recipient.
+    pub fn maintenance(env: Env, recipient: Address) {
+        Self::bump_instance_ttl(env.clone());
+        let count = Self::get_vesting_count(&env, &recipient);
+        for i in 0..count {
+            Self::extend_ttl_vesting(&env, &recipient, i);
+        }
+    }
 }
 mod test;
+mod ttl_test;
